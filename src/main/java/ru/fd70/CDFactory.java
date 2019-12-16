@@ -10,6 +10,8 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.fd70.testportal.*;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
@@ -41,12 +43,7 @@ public class CDFactory {
         //logger.debug("Chromedriver path: " + filePath);
         return filePath.toString();
     }
-    private static void quitWebDriverAfter(ChromeDriver cd, int mills) {
-        sleep(mills);
-        if (cd != null) {
-            cd.quit();
-        }
-    }
+
     private static ChromeDriver initCD() {
         System.setProperty("webdriver.chrome.driver", getChromeDriver_path());
         System.setProperty("webdriver.chrome.silentOutput", "true");
@@ -61,21 +58,32 @@ public class CDFactory {
         System.setProperty("webdriver.chrome.driver", getChromeDriver_path());
         return new ChromeDriver();
     }
-    public static void main (int sw) {
+
+    private static volatile LoggedProcess loggedProcess = null;
+    private static void initProcess(ChromeDriver chromeDriver, LoggedProcess target) {
+        initProcess(chromeDriver, target, 0);
+    }
+    private static void initProcess(ChromeDriver chromeDriver, LoggedProcess target, int wTimeSecBeforeClose) {
+        target.setwTimeSecBeforeClose(wTimeSecBeforeClose);
+        target.setChromeDriver(chromeDriver);
+        loggedProcess = target;
+    }
+
+    public static LoggedProcess main(int sw) {
         PropertyConfigurator.configure(getPropertiesPath("log4j").toString());
-        ChromeDriver chromeDriver = null;
         try {
             switch (sw) {
-                case 1: break;
-                case 2: break;
-//                case 97: chromeDriver = initCD_windomed(); new AddNewUser_FL().run(chromeDriver, 1200); break;
-//                case 98: chromeDriver = initCD_windomed(); new AddNewUser_DL().run(chromeDriver, 1200); break;
-//                case 99: chromeDriver = initCD_windomed(); new AddNewUser_IP().run(chromeDriver, 1200); break;
-//                case 100: chromeDriver = initCD_windomed(); new AddNewBoat().run(chromeDriver, 1200); break;
+                case 42: initProcess(initCD_windomed(), new ExampleClass(), 60); break;
+
+                case 1: initProcess(initCD_windomed(), new Twitch(), 120); break;
+                case 2: initProcess(initCD(), new Twitch(), 120); break;
+                case 7: initProcess(initCD_windomed(), new Test(), 10); break;
+                case 8: initProcess(initCD(), new Test(), 10); break;
+
                 default:
-                    logger.trace("type again");
+                    logger.trace("no any case " + sw);
             }
-            quitWebDriverAfter(chromeDriver, 200);
+
         } catch (Exception e) {
             logger.error("<--- --- --->");
             logger.error(e.getMessage());
@@ -84,7 +92,8 @@ public class CDFactory {
                     logger.error(ste.toString());
                 }
             }
-            quitWebDriverAfter(chromeDriver, 5000);
         }
+
+        return loggedProcess;
     }
 }

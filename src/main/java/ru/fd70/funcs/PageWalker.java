@@ -20,7 +20,7 @@ public class PageWalker {
     }
     private static final Logger logger = LoggerFactory.getLogger("PageWalker");
 
-    private static boolean waitForElement(ChromeDriver cd, String xpath) {
+    protected static boolean waitForElement(ChromeDriver cd, String xpath) {
         return waitForElement(cd, xpath, 300);
     }
     protected static boolean waitForElement(ChromeDriver cd, String xpath, int timeoutInMills) {

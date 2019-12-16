@@ -1,4 +1,5 @@
-package ru.fd70.testportal;
+package ru.fd70;
+
 import ru.fd70.funcs.PageWalker;
 import static ru.fd70.funcs.SeFunc.*;
 import static ru.fd70.funcs.SeFunc.getProperties;
@@ -12,32 +13,51 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Properties;
-public class NewTestTemplate extends PageWalker {
-    private static int THIS_INSTANCE = 0;
 
-    public NewTestTemplate() {
+abstract public class LoggedProcess extends PageWalker implements Runnable {
+    private static volatile int THIS_INSTANCE = 0;
+    private int wTimeSecBeforeClose = 0;
+    private ChromeDriver chromeDriver = null;
+
+    public LoggedProcess() {
         PropertyConfigurator.configure(getPropertiesPath("log4j").toString());
     }
 
+
     private String getLoggerName() {
-        String name = new Throwable().getStackTrace()[2].getClassName();
-//        for (StackTraceElement ss:new Throwable().getStackTrace()) {
-//            System.out.println(ss.toString());
-//        }
-        LinkedList<String> ll = new LinkedList<>(Arrays.asList(name.split("\\.")));
-        return ll.getLast();
+        LinkedList<String> name = new LinkedList<>(Arrays.asList(this.getClass().getName().split("\\.")));
+        return name.getLast();
     }
+
+    protected void printtrace(Object obj) {this.logger.trace(obj.toString());}
     protected Logger logger = LoggerFactory.getLogger(++THIS_INSTANCE + "'" + this.getLoggerName());
+
     protected Properties var = getProperties("main");
-    protected void print(int s) { this.logger.trace(s + ""); }
-    public void run(ChromeDriver chromeDriver, int wTimeSecBeforeClose) {
+
+    public void setwTimeSecBeforeClose(int t) {
+        this.wTimeSecBeforeClose = t;
+    }
+    public void setChromeDriver(ChromeDriver cd) {
+        this.chromeDriver = cd;
+    }
+
+    private static void quitWebDriverAfter(ChromeDriver cd, int sec) {
+        if (cd != null) {
+            sleep(sec, 0);
+            cd.quit();
+        }
+    }
+
+    public void run() {
+
         long startTime = System.currentTimeMillis();
         try {
+
             logger.warn("Start");
-            //this.main(chromeDriver);
-            this.getClass().getDeclaredMethod("main", ChromeDriver.class).invoke(this, chromeDriver);
+            this.main(chromeDriver);
             logger.warn("end after " + (System.currentTimeMillis() - startTime)/1000);
-            sleep(wTimeSecBeforeClose, 0);
+
+            quitWebDriverAfter(chromeDriver, wTimeSecBeforeClose);
         } catch (Exception e) {
             logger.error("---> drop after " + (System.currentTimeMillis() - startTime)/1000 + "s with:");
             logger.error(e.getCause() + e.getMessage());
@@ -46,11 +66,8 @@ public class NewTestTemplate extends PageWalker {
                     logger.error(ste.toString());
                 }
             }
-            sleep(wTimeSecBeforeClose, 0);
+            quitWebDriverAfter(chromeDriver, wTimeSecBeforeClose);
         }
     }
-    public void run(ChromeDriver chromeDriver) {
-        run(chromeDriver, 0);
-    }
-    void main(ChromeDriver chromeDriver) throws Exception {}
+    abstract public void main(ChromeDriver chromeDriver) throws Exception;
 }
