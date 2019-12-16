@@ -5,34 +5,37 @@ import static ru.fd70.funcs.SeFunc.getPropertiesPath;
 import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ru.fd70.funcs.SeFunc;
 
 import java.time.Instant;
 import java.util.*;
 
-public class MainClass {
+public final class MainClass {
     private static final int COUNT_OF_TESTS = 9;
     private static final int COUNT_OF_RUNNING_THREADS = 10;
 
     private static class QueueController {
         Queue<Integer> processCases;
         LinkedList<TestProcess> testProcessList = new LinkedList<>();
-        private boolean INPUT_IS_OPEN = true;
+        private boolean INPUT_IS_OPEN = false;
 
         QueueController(Queue<Integer> pc) {
             this.processCases = pc;
         }
 
         void startWatching() {
+            INPUT_IS_OPEN = true;
             while (INPUT_IS_OPEN || (processCases.size() != 0) || (testProcessList.size() != 0)) {
-                SeFunc.sleep(128);
+                Thread.yield();
                 if ((processCases.size() != 0) && (testProcessList.size() < COUNT_OF_RUNNING_THREADS)) {
-                    testProcessList.add(new TestProcess(processCases.poll()));
+                    //testProcessList.add(new TestProcess(processCases.poll()));
+                    TestProcess tp = new TestProcess(processCases.poll());
+                    testProcessList.add(tp);
+                    tp.start();
                 }
                 for (int i = 0; i < testProcessList.size(); i++) {
                     //clear closed processes/ вынести в отдельный метод?
                     TestProcess testProcess = testProcessList.get(i);
-                    if (testProcess.thread.getState().equals(Thread.State.TERMINATED)) {
+                    if (!testProcess.isAlive()) {
                         testProcessList.remove(i);
                     }
                 }
@@ -41,26 +44,17 @@ public class MainClass {
         void stopWatching() {
             this.INPUT_IS_OPEN = false;
         }
-        void info() {
-            StringBuilder output = new StringBuilder();
-            for (TestProcess testProcess : testProcessList) {
-                output.append(testProcess.THIS_THREAD_ID).append(" ");
-            }
-            logger.info("[ " + output.toString() + "]");
-        }
     }
-    private static class TestProcess {
-        private static int num_of_thread = 0;
-        private Thread thread;
-        final int THIS_THREAD_ID = ++num_of_thread;
-        TestProcess(int posOfCase) {
-            thread = new Thread(() -> CDFactory.main(posOfCase));
-            thread.start();
+    private static class TestProcess extends Thread {
+        int caseNum;
+        TestProcess(int CDFactorycase) {
+            caseNum = CDFactorycase;
         }
-//    void stopProcess () {
-//        System.out.println("Stop: " + thisThreadId);
-//        t1.stop();
-//    }
+
+        @Override
+        public void run() {
+            new Thread(CDFactory.main(caseNum)).start();
+        }
     }
 
     private static String repeat(int count, String with) {
@@ -162,7 +156,7 @@ public class MainClass {
             logger.error("<--- --- --->");
             logger.error(e.getCause() + e.getMessage());
             for (StackTraceElement ste: e.getStackTrace()) {
-                if (ste.toString().contains("ru.cfmc.")) {
+                if (ste.toString().contains("ru.fd70.")) {
                     logger.error(ste.toString());
                 }
             }
