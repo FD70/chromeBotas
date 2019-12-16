@@ -75,11 +75,6 @@ public class CDFactory {
             switch (sw) {
                 case 42: initProcess(initCD_windomed(), new ExampleClass(), 60); break;
 
-                case 1: initProcess(initCD_windomed(), new Twitch(), 120); break;
-                case 2: initProcess(initCD(), new Twitch(), 120); break;
-                case 7: initProcess(initCD_windomed(), new Test(), 10); break;
-                case 8: initProcess(initCD(), new Test(), 10); break;
-
                 default:
                     logger.trace("no any case " + sw);
             }
@@ -88,7 +83,7 @@ public class CDFactory {
             logger.error("<--- --- --->");
             logger.error(e.getMessage());
             for (StackTraceElement ste: e.getStackTrace()) {
-                if (ste.toString().contains("ru.cfmc.")) {
+                if (ste.toString().contains("ru.fd70.")) {
                     logger.error(ste.toString());
                 }
             }

@@ -62,7 +62,7 @@ abstract public class LoggedProcess extends PageWalker implements Runnable {
             logger.error("---> drop after " + (System.currentTimeMillis() - startTime)/1000 + "s with:");
             logger.error(e.getCause() + e.getMessage());
             for (StackTraceElement ste: e.getStackTrace()) {
-                if (ste.toString().contains("ru.cfmc.")) {
+                if (ste.toString().contains("ru.fd70.")) {
                     logger.error(ste.toString());
                 }
             }
