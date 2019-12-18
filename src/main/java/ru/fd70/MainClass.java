@@ -12,31 +12,27 @@ import java.util.*;
 public final class MainClass {
     private static final int COUNT_OF_TESTS = 9;
     private static final int COUNT_OF_RUNNING_THREADS = 10;
+    
+    private static final Logger logger = LoggerFactory.getLogger("main");
+    
+    private static final Queue<Integer> testProcessOrder = new LinkedList<>();
 
     private static class QueueController {
-        Queue<Integer> processCases;
-        LinkedList<TestProcess> testProcessList = new LinkedList<>();
         private boolean INPUT_IS_OPEN = false;
-
-        QueueController(Queue<Integer> pc) {
-            this.processCases = pc;
-        }
-
+        ArrayList<MyProcess> myProcessList = new ArrayList<>();
+        
         void startWatching() {
             INPUT_IS_OPEN = true;
-            while (INPUT_IS_OPEN || (processCases.size() != 0) || (testProcessList.size() != 0)) {
+            while (INPUT_IS_OPEN || (testProcessOrder.size() != 0) || (myProcessList.size() != 0)) {
                 Thread.yield();
-                if ((processCases.size() != 0) && (testProcessList.size() < COUNT_OF_RUNNING_THREADS)) {
-                    //testProcessList.add(new TestProcess(processCases.poll()));
-                    TestProcess tp = new TestProcess(processCases.poll());
-                    testProcessList.add(tp);
-                    tp.start();
+                if ((testProcessOrder.size() != 0) && (myProcessList.size() < COUNT_OF_RUNNING_THREADS)) {
+
+                    myProcessList.add(new MyProcess(testProcessOrder.poll()));
                 }
-                for (int i = 0; i < testProcessList.size(); i++) {
-                    //clear closed processes/ вынести в отдельный метод?
-                    TestProcess testProcess = testProcessList.get(i);
-                    if (!testProcess.isAlive()) {
-                        testProcessList.remove(i);
+                for (int i = myProcessList.size() - 1; 0 < i; i--) {
+                    Thread checkedThread = myProcessList.get(i).thread;
+                    if (!checkedThread.isAlive()) {
+                        myProcessList.remove(i);
                     }
                 }
             }
@@ -45,15 +41,13 @@ public final class MainClass {
             this.INPUT_IS_OPEN = false;
         }
     }
-    private static class TestProcess extends Thread {
-        int caseNum;
-        TestProcess(int CDFactorycase) {
-            caseNum = CDFactorycase;
-        }
-
-        @Override
-        public void run() {
-            new Thread(CDFactory.main(caseNum)).start();
+    
+    private static class MyProcess {
+        Thread thread;
+        MyProcess(int CDFcase) {
+            // ???
+            thread = new Thread(() -> CDFactory.main(CDFcase).run());
+            thread.start();
         }
     }
 
@@ -109,9 +103,6 @@ public final class MainClass {
         scan = new Scanner(decoder(String.valueOf(scan.nextLine())));
         return scan;
     }
-
-    private static final Logger logger = LoggerFactory.getLogger("main");
-    private static final Queue<Integer> testProcessOrder = new LinkedList<>();
 
     private static void mainLoop (Scanner scan) {
         while ((!scan.hasNext("exit")) && (!scan.hasNext("0"))) {
