@@ -30,10 +30,13 @@ abstract public class LoggedProcess extends PageWalker implements Runnable {
     }
 
     protected void printtrace(Object obj) {this.logger.trace(obj.toString());}
-    protected Logger logger = LoggerFactory.getLogger(++THIS_INSTANCE + "'" + this.getLoggerName());
+    protected Logger logger = LoggerFactory.getLogger(getInstanceNumber() + "'" + this.getLoggerName());
 
     protected Properties var = getProperties("main");
 
+    private static synchronized int getInstanceNumber() {
+        return ++THIS_INSTANCE;
+    }
     public void setwTimeSecBeforeClose(int t) {
         this.wTimeSecBeforeClose = t;
     }
