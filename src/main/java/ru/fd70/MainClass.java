@@ -20,7 +20,8 @@ public final class MainClass {
         testProcessOrder.add(i);
     }
     private static synchronized int getFromTestProcessOrder() {
-        return testProcessOrder.poll();
+        if(testProcessOrder.size() != 0) return testProcessOrder.poll();
+        return 0;
     }
 
     private static class QueueController {
