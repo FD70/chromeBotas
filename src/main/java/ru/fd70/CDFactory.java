@@ -73,6 +73,7 @@ public class CDFactory {
         PropertyConfigurator.configure(getPropertiesPath("log4j").toString());
         try {
             switch (sw) {
+                case 0: break;
                 case 42: initProcess(initCD_windomed(), new ExampleClass(), 60); break;
 
                 default:
