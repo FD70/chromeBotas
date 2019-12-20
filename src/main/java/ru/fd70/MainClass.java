@@ -15,42 +15,47 @@ public final class MainClass {
     
     private static final Logger logger = LoggerFactory.getLogger("main");
     
-    private static final Queue<Integer> testProcessOrder = new LinkedList<>();
+    private static Queue<Integer> testProcessOrder = new LinkedList<>();
+    private static synchronized void addInTestProcessOrder (int i) {
+        testProcessOrder.add(i);
+    }
+    private static synchronized int getFromTestProcessOrder() {
+        return testProcessOrder.poll();
+    }
 
     private static class QueueController {
-        private boolean INPUT_IS_OPEN = false;
-        ArrayList<MyProcess> myProcessList = new ArrayList<>();
+        static private boolean INPUT_IS_OPEN = false;
+        static private ArrayList<Thread> processList = new ArrayList<>();
         
-        void startWatching() {
+        static void startWatching() {
             INPUT_IS_OPEN = true;
-            while (INPUT_IS_OPEN || (testProcessOrder.size() != 0) || (myProcessList.size() != 0)) {
+            while (INPUT_IS_OPEN || (testProcessOrder.size() != 0) || (processList.size() != 0)) {
                 Thread.yield();
-                if ((testProcessOrder.size() != 0) && (myProcessList.size() < COUNT_OF_RUNNING_THREADS)) {
 
-                    myProcessList.add(new MyProcess(testProcessOrder.poll()));
+                if ((testProcessOrder.size() != 0) && (processList.size() < COUNT_OF_RUNNING_THREADS)) {
+
+                    //int ttt = getFromTestProcessOrder();
+                    Thread thread = new Thread(() -> {
+                        LoggedProcess lp = CDFactory.main(getFromTestProcessOrder());
+                        if (lp != null) lp.run();
+                    });
+                    processList.add(thread);
+                    thread.start();
+
                 }
-                for (int i = myProcessList.size() - 1; 0 < i; i--) {
-                    Thread checkedThread = myProcessList.get(i).thread;
+                for (int i = processList.size() - 1; 0 <= i; i--) {
+                    Thread checkedThread = processList.get(i);
                     if (!checkedThread.isAlive()) {
-                        myProcessList.remove(i);
+                        processList.remove(i);
                     }
                 }
             }
         }
-        void stopWatching() {
-            this.INPUT_IS_OPEN = false;
+        static void stopWatching() {
+            INPUT_IS_OPEN = false;
         }
     }
     
-    private static class MyProcess {
-        Thread thread;
-        MyProcess(int CDFcase) {
-            // ???
-            thread = new Thread(() -> CDFactory.main(CDFcase).run());
-            thread.start();
-        }
-    }
-
     private static String repeat(int count, String with) {
         return new String(new char[count]).replace("\0", with);
     }
@@ -109,7 +114,7 @@ public final class MainClass {
             if (scan.hasNextInt()) {
                 int nInt = scan.nextInt();
                 //new Thread(() -> CDFactory.main(nInt)).start();
-                testProcessOrder.add(nInt);
+                addInTestProcessOrder(nInt);
             } else {
                 if (scan.hasNext()) {
                     //Если след. аргумент не число - пропустить.
@@ -125,8 +130,7 @@ public final class MainClass {
     public static void main (String[] args) {
         PropertyConfigurator.configure(getPropertiesPath("log4j").toString());
 
-        QueueController queueController = new QueueController(testProcessOrder);
-        new Thread(queueController::startWatching).start();
+        new Thread(QueueController::startWatching).start();
 
         logger.warn("\n\n<------------->");
         logger.warn(Date.from(Instant.now()).toString());
@@ -139,11 +143,11 @@ public final class MainClass {
         try {
             mainLoop(scan);
             scan.close();
-            queueController.stopWatching();
+            QueueController.stopWatching();
             logger.info("Input completed");
         } catch (Exception e) {
             scan.close();
-            queueController.stopWatching();
+            QueueController.stopWatching();
             logger.error("<--- --- --->");
             logger.error(e.getCause() + e.getMessage());
             for (StackTraceElement ste: e.getStackTrace()) {
