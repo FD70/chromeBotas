@@ -1,0 +1,79 @@
+package parser777;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import java.io.IOException;
+import java.util.ArrayList;
+
+public class Parser777 {
+
+    @Deprecated
+    private static ArrayList<String> parseLinks(String domain) throws IOException {
+        ArrayList<String> pList = new ArrayList<>();
+
+        // User agent
+        // referer - url источника запроса ?!?
+        Document doc = Jsoup.connect(domain)
+                .userAgent("Chrome/4.0.249.0 Safari/532.5")
+                .referrer("http://www.google.com")
+                .get();
+
+        Elements links = doc.getElementsByAttribute("href");
+
+        for (Element element:links) {
+            pList.add(element.attr("href"));
+        }
+
+        return pList;
+    }
+
+    public static ArrayList<String> returnLinksFromHTML(String html) {
+        ArrayList<String> pList = new ArrayList<>();
+
+        // непосредственно парсинг
+        Document doc = Jsoup.parse(html);
+
+        Elements links = doc.getElementsByAttribute("href");
+
+        for (Element element:links) {
+            pList.add(element.attr("href"));
+        }
+
+        return pList;
+    }
+
+    public static ArrayList<String> stringsFilter(ArrayList<String> arrayList, String mustContain) {
+        ArrayList<String> filtered = new ArrayList<>();
+
+        for (String element:arrayList) {
+            if (element.contains(mustContain)) {
+                filtered.add(element);
+            }
+        }
+
+        return filtered;
+    }
+
+    @Deprecated
+    public static void main(String[] args) throws IOException {
+
+        String domainTemplate = "http://yandex.ru";
+
+        ArrayList<String> rawLinks = parseLinks(domainTemplate);
+        for (String itIsALink:rawLinks) {
+            System.out.println(itIsALink);
+        }
+
+        System.out.println("/--------------------------------------------------------------------------------------/");
+
+        ArrayList<String> throughFilter = stringsFilter(rawLinks, domainTemplate);
+
+        for (String itIsALink:throughFilter) {
+            System.out.println(itIsALink);
+        }
+
+    }
+}
