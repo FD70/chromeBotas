@@ -7,6 +7,8 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Set;
 
 
 public class PageWalker {
@@ -16,16 +18,10 @@ public class PageWalker {
 
     String baseLink;
 
-    private static Cookie _token = null;
-    private static Cookie _refresh_token = null;
-
-    public static void set_token (Cookie token) {
-        _token = token;
+    private static Set<Cookie> cookieSet = null;
+    public static void setCookies (Set<Cookie> _cs) {
+        cookieSet = _cs;
     }
-    public static void set_refresh_token (Cookie refresh_token) {
-        _refresh_token = refresh_token;
-    }
-
 
     private final ArrayList<String> allLinks = new ArrayList<>();
     private final ArrayList<String> responsedLinks = new ArrayList<>();
@@ -35,9 +31,6 @@ public class PageWalker {
         this.logger = logger;
         this.baseLink = baseUrl;
 
-//        _token = driver.manage().getCookieNamed("token");
-//        _refresh_token = driver.manage().getCookieNamed("refresh_token");
-
         allLinks.add(baseLink);
         mainloop();
     }
@@ -46,16 +39,22 @@ public class PageWalker {
         // /favicon.ico -- /7ae926c.js -- ненужные окончания
         return itMayBeLink.endsWith(".js")
                 || itMayBeLink.endsWith(".pdf")
-                || itMayBeLink.endsWith(".ico");
+                || itMayBeLink.endsWith(".ico")
+                || itMayBeLink.endsWith(".rss");
     }
 
     private int COUNTER = 0;
     private void mainloop () {
         try {
             while (pageWalker(COUNTER++));
+        } catch (IndexOutOfBoundsException i008e) {
+            logger.error(i008e.getCause() + i008e.getMessage());
+            logger.error(Arrays.toString(i008e.getStackTrace()));
         } catch (Exception e) {
             logger.error("Я сломался где-то");
             logger.error(e.getCause() + e.getMessage());
+            // чтобы в цикле не переписать все логи
+            AFuncs.sleep(2000);
             for (StackTraceElement ste: e.getStackTrace()) {
                 if (ste.toString().contains("parser777.")) {
                     logger.error(ste.toString());
@@ -63,11 +62,10 @@ public class PageWalker {
             }
             mainloop();
         }
-
     }
 
     private boolean pageWalker (int linkNumber) {
-        
+
         String nextUrl = allLinks.get(linkNumber);
         logger.info("[" + linkNumber + "] " + nextUrl);
         driver.get(nextUrl);
@@ -78,14 +76,27 @@ public class PageWalker {
         // parse and response
         // *нужно разделить сущности
         String currentUrl = driver.getCurrentUrl();
+
         ArrayList<String> rawLinks = Parser777.returnLinksFromHTML(driver.getPageSource());
 
         for (String _l: rawLinks) {
             // дописываю ссылку
+
             if (!_l.startsWith("http")) {
                 _l = baseLink + _l;
                 // Важный момент!! Чтобы не дублировалось '//' при конкатенации
             }
+
+            /*
+            Этот кусок помог мне избавиться от логов, низкий поклон
+            if (!_l.startsWith("http")) {
+                if (_l.startsWith("//")) {
+                    // do nothing
+                } else if (_l.startsWith("/")) {
+                    _l = baseLink + _l;
+                }
+            }
+             */
 
             int responseCode;
 
@@ -93,18 +104,16 @@ public class PageWalker {
                 // Уже проходил ответ по этой ссылке
                 continue;
             } else {
-                if (_l.contains(baseLink)) {
-                    // вход с токеном или без
-                    // здесь нужно переделать сам сеттер печенек в классе
-                    // затем проверка в принципе не нужна будет
-                    if (_token != null && _refresh_token != null) {
-                        responseCode = HttpResponse.codeViaGet(_l, _token, _refresh_token);
-                    } else {
-                        responseCode = HttpResponse.codeViaGet(_l);
-                    }
-                    System.out.println(responseCode + "-^._.^- " + _l);
+                // делаю запрос с cookies или без них
+                if (cookieSet != null) {
+                    responseCode = HttpResponse.codeViaGet(_l, cookieSet);
                 } else {
                     responseCode = HttpResponse.codeViaGet(_l);
+                }
+                // Здесь просто декорированный вывод в консоль, можно исключить
+                if (_l.contains(baseLink)) {
+                    System.out.println(responseCode + "-^._.^- " + _l);
+                } else {
                     System.out.println(responseCode + "-<...>-" + _l);
                 }
             }
@@ -113,19 +122,15 @@ public class PageWalker {
 
             // checkResponseCodes()
             if (responseCode != 200) {
-                //TODO создать словарь с ответами не 200
-                //  Но, все можно увидеть в логе, в принципе
-                logger.warn(currentUrl);
+                logger.warn(_l);
                 logger.warn("response code: " + responseCode);
             } else {
                 // addNewLink()
-                if (_l.contains(baseLink)) {
-                    if (!endsWithJsIcoEtc(_l)) {
-                        if (!allLinks.contains(_l)) {
-                            allLinks.add(_l);
-                            System.out.println(" ++ + " + _l);
-                        }
-                    }
+                if (    _l.contains(baseLink) &&
+                        !endsWithJsIcoEtc(_l) &&
+                        !allLinks.contains(_l)) {
+                    allLinks.add(_l);
+                    System.out.println(" ++ + " + _l);
                 }
             }
         }
