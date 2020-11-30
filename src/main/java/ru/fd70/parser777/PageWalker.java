@@ -3,13 +3,11 @@ package parser777;
 import initial.AFuncs;
 
 import org.openqa.selenium.Cookie;
-import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.slf4j.Logger;
 
-
 import java.util.ArrayList;
-import java.util.List;
+
 
 public class PageWalker {
 
@@ -44,6 +42,13 @@ public class PageWalker {
         mainloop();
     }
 
+    private boolean endsWithJsIcoEtc (String itMayBeLink) {
+        // /favicon.ico -- /7ae926c.js -- ненужные окончания
+        return itMayBeLink.endsWith(".js")
+                || itMayBeLink.endsWith(".pdf")
+                || itMayBeLink.endsWith(".ico");
+    }
+
     private int COUNTER = 0;
     private void mainloop () {
         try {
@@ -61,42 +66,8 @@ public class PageWalker {
 
     }
 
-    private boolean endsWithJsIcoEtc (String itMayBeLink) {
-        // /favicon.ico -- /7ae926c.js -- ненужные окончания
-        return itMayBeLink.endsWith(".js")
-                || itMayBeLink.endsWith(".pdf")
-                || itMayBeLink.endsWith(".ico");
-    }
-
-    protected boolean waitForElement(ChromeDriver cd, String xpath) {
-        return waitForElement(cd, xpath, 300);
-    }
-    protected boolean waitForElement(ChromeDriver cd, String xpath, int timeoutInMills) {
-        List<WebElement> webElement;
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutInMills) {
-            webElement = cd.findElementsByXPath(xpath);
-            if (webElement.size() != 0) {
-                try {
-                    if (webElement.get(0).isEnabled() && webElement.get(0).isDisplayed()) return true;
-                } catch (Exception e) {
-                    return false;
-                }
-            }
-        }
-        return false;
-    }
-    protected void waitForHide(ChromeDriver cd, String xpath, int timeoutInMills) {
-        final long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutInMills) {
-            if (!waitForElement(cd, xpath)) {
-                return;
-            }
-        }
-    }
-
     private boolean pageWalker (int linkNumber) {
-
+        
         String nextUrl = allLinks.get(linkNumber);
         logger.info("[" + linkNumber + "] " + nextUrl);
         driver.get(nextUrl);
@@ -104,21 +75,11 @@ public class PageWalker {
         //FIXME это нужно убирать, но без нее, не успевает прогрузить страницы
         AFuncs.sleep(4000);
 
-        // Вот эта штука должна была бы работать вместо, но нет
-        // waitForHide(driver, "//div[@class=\"loading-page\"]", 4000);
-
-        //FIXME Тут вызов функций с парсерами и добавлением недостающих ссылок
-        // [ready] Их есчо дописать нужно
-        // + получать статус код каждой ссчылк
-        // --
-        // [fixed] Сейчас есть дублирование запросов RestAssured
-        // Возможно, нужно создать список проверенных ссылок,
-        // Нааадо! Дублирование происходит по каждой странице
-
-
-        // parse
+        // parse and response
+        // *нужно разделить сущности
         String currentUrl = driver.getCurrentUrl();
         ArrayList<String> rawLinks = Parser777.returnLinksFromHTML(driver.getPageSource());
+
         for (String _l: rawLinks) {
             // дописываю ссылку
             if (!_l.startsWith("http")) {
@@ -133,6 +94,9 @@ public class PageWalker {
                 continue;
             } else {
                 if (_l.contains(baseLink)) {
+                    // вход с токеном или без
+                    // здесь нужно переделать сам сеттер печенек в классе
+                    // затем проверка в принципе не нужна будет
                     if (_token != null && _refresh_token != null) {
                         responseCode = HttpResponse.codeViaGet(_l, _token, _refresh_token);
                     } else {
