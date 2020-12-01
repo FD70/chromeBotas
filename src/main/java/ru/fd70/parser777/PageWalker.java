@@ -35,16 +35,9 @@ public class PageWalker {
         mainloop();
     }
 
-    private boolean endsWithJsIcoEtc (String itMayBeLink) {
-        // /favicon.ico -- /7ae926c.js -- ненужные окончания
-        return itMayBeLink.endsWith(".js")
-                || itMayBeLink.endsWith(".pdf")
-                || itMayBeLink.endsWith(".ico")
-                || itMayBeLink.endsWith(".rss");
-    }
-
     private int COUNTER = 0;
     private void mainloop () {
+        // FIXME: Убрать "рекурсивную" зависимость метода
         try {
             while (pageWalker(COUNTER++));
         } catch (IndexOutOfBoundsException i008e) {
@@ -52,7 +45,7 @@ public class PageWalker {
             logger.error(Arrays.toString(i008e.getStackTrace()));
         } catch (Exception e) {
             logger.error("Я сломался где-то");
-            logger.error(e.getCause() + e.getMessage());
+            logger.error(e.getCause() + " <<==>> " + e.getMessage());
             // чтобы в цикле не переписать все логи
             AFuncs.sleep(2000);
             for (StackTraceElement ste: e.getStackTrace()) {
@@ -64,7 +57,7 @@ public class PageWalker {
         }
     }
 
-    private boolean pageWalker (int linkNumber) {
+    private boolean pageWalker (int linkNumber) throws Exception {
 
         String nextUrl = allLinks.get(linkNumber);
         logger.info("[" + linkNumber + "] " + nextUrl);
@@ -75,48 +68,47 @@ public class PageWalker {
 
         // parse and response
         // *нужно разделить сущности
-        String currentUrl = driver.getCurrentUrl();
+        // String currentUrl = driver.getCurrentUrl();
 
         ArrayList<String> rawLinks = Parser777.returnLinksFromHTML(driver.getPageSource());
 
+        // выделить в метод(ы) ?
         for (String _l: rawLinks) {
-            // дописываю ссылку
-
+            // дописываю ссылку, если нужно // (#) !!
+            if (_l.startsWith("#")) {
+                continue;
+            }
             if (!_l.startsWith("http")) {
-                _l = baseLink + _l;
-                // Важный момент!! Чтобы не дублировалось '//' при конкатенации
+                _l = completeLink(_l);
             }
 
-            /*
-            Этот кусок помог мне избавиться от логов, низкий поклон
-            if (!_l.startsWith("http")) {
-                if (_l.startsWith("//")) {
-                    // do nothing
-                } else if (_l.startsWith("/")) {
-                    _l = baseLink + _l;
-                }
-            }
-             */
 
             int responseCode;
 
-            if (responsedLinks.contains(_l)) {
-                // Уже проходил ответ по этой ссылке
-                continue;
-            } else {
-                // делаю запрос с cookies или без них
-                if (cookieSet != null) {
-                    responseCode = HttpResponse.codeViaGet(_l, cookieSet);
+            try {
+                if (responsedLinks.contains(_l)) {
+                    // Уже проходил ответ по этой ссылке
+                    continue;
                 } else {
-                    responseCode = HttpResponse.codeViaGet(_l);
+                    // делаю запрос с cookies или без них
+                    if (cookieSet != null) {
+                        responseCode = HttpResponse.codeViaGet(_l, cookieSet);
+                    } else {
+                        responseCode = HttpResponse.codeViaGet(_l);
+                    }
+                    // Здесь просто декорированный вывод в консоль, можно исключить
+                    if (_l.contains(baseLink)) {
+                        System.out.println(responseCode + "-^._.^- " + _l);
+                    } else {
+                        System.out.println(responseCode + "-<...>-" + _l);
+                    }
                 }
-                // Здесь просто декорированный вывод в консоль, можно исключить
-                if (_l.contains(baseLink)) {
-                    System.out.println(responseCode + "-^._.^- " + _l);
-                } else {
-                    System.out.println(responseCode + "-<...>-" + _l);
-                }
+            } catch (Exception e) {
+                throw new Exception(e.getMessage()
+                        + "\n"
+                        + "был запрос по: " + _l);
             }
+
 
             responsedLinks.add(_l);
 
@@ -137,5 +129,26 @@ public class PageWalker {
 
         // возвращает false, когда прочекается последняя доступная ссылка из "allLinks"
         return allLinks.size() > linkNumber + 1;
+    }
+
+    private boolean endsWithJsIcoEtc (String itMayBeLink) {
+        // /favicon.ico -- /7ae926c.js -- ненужные окончания
+        return itMayBeLink.endsWith(".js")
+                || itMayBeLink.endsWith(".pdf")
+                || itMayBeLink.endsWith(".ico")
+                || itMayBeLink.endsWith(".rss");
+    }
+
+    private String completeLink (String shortLink) {
+        // (//smt.th)
+        // (/smt.th)
+        // Важный момент!! Чтобы не дублировалось '//' при конкатенации
+        if (shortLink.startsWith("//") || !shortLink.startsWith("/")) {
+             return shortLink.replace("//", "https://");
+//            return shortLink;
+        } else {
+            // возможно // return driver.getCurrentUrl() + shortLink;
+            return baseLink + shortLink;
+        }
     }
 }
