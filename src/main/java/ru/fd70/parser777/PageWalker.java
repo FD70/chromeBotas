@@ -14,10 +14,13 @@ import java.util.Set;
  *      Парсит ссылки, проверяет код ответа, делает все сама
  *      Делает все это на базе Selenium (chromeDriver)
  *
- *      -- чтоза Добавить возможность параллельно запускать несколько "CDriver"
- *      -- Возможность настройки: проверять ссылки с других url, или нет
+ *      -- ЧТОЗА: Добавить возможность параллельно запускать несколько "CDriver"
+ *      -- TODO: Возможность настройки: проверять ссылки с других url, или нет
  * */
 public class PageWalker {
+
+    // чтоза: очевидно, что переменная нужна для одновременного запуска неск. CD
+    int COUNT_OF_THREADS = 1;
 
     ChromeDriver driver;
     Logger logger;
@@ -28,6 +31,10 @@ public class PageWalker {
         cookieSet = _cs;
     }
 
+    // that is for: private boolean wrongStartOfRawLink (String rawLink)
+    private static Set<String> linkStartingFilter = Set.of(
+            "#", "viber:", "blob:", "mailto:"
+    );
 
 
     private static final ArrayList<String> allLinks = new ArrayList<>();
@@ -44,7 +51,6 @@ public class PageWalker {
         return allLinks.get(linkNumber);
         // ЧТОЗА здесь нужно увеличивать значение счетчика COUNTER;
     }
-
     private static synchronized boolean containsInAllLinks (String link) {
         // чтоза пустота
         return false;
@@ -57,9 +63,6 @@ public class PageWalker {
         return false;
     }
 
-
-
-
     public PageWalker (ChromeDriver driver, Logger logger, String baseUrl) {
         this.driver = driver;
         this.logger = logger;
@@ -71,11 +74,16 @@ public class PageWalker {
 
     private int COUNTER = 0;
     private void mainloop () {
-        // WHAT the: тут нужно либо вызывать метод с параметром, либо одно из двух;
-        //  Хотя, как ты организуешь обход всех ссылок, не используя цикла.
-        //  Значит нужно перехватывать Исключения на более низком уровне, чем здесь
         try {
-            while (pageWalker(COUNTER++));
+            // чтоза прикол, тогда надо будет делать условие для этого интерфейса
+            //  ведь каждый из f. потоков может найти новые ссылки после того,
+            //  как выйдут остальные экземпляры CD
+            // чтоза GATE = true; GATE = false;
+            while (parseLinksWhileTheyAre(COUNTER++)) {
+                // allLinks.
+                // What: добавить тело цикла, внутри:
+                //  проверка на количество оставшихся ссылок соответственно
+            }
         } catch (IndexOutOfBoundsException i008e) {
             logger.error(i008e.getCause() + i008e.getMessage());
             logger.error(Arrays.toString(i008e.getStackTrace()));
@@ -93,8 +101,7 @@ public class PageWalker {
         }
     }
 
-    // WHAT: поменять название метода, на linkCrawler или что-то более говорящее и относящееся к сущности
-    private boolean pageWalker (int linkNumber) throws Exception {
+    private boolean parseLinksWhileTheyAre(int linkNumber) throws Exception {
 
         String nextUrl = allLinks.get(linkNumber);
         logger.info("[" + linkNumber + "] " + nextUrl);
@@ -103,90 +110,119 @@ public class PageWalker {
         //FIXME это нужно убирать, но без нее, не успевает прогрузить страницы
         AFuncs.sleep(4000);
 
-        // parse and response
-        // *нужно разделить сущности
-        // String currentUrl = driver.getCurrentUrl();
-
         ArrayList<String> rawLinks = Parser777.returnLinksFromHTML(driver.getPageSource());
+        ArrayList<String> addedInAllLinks = new ArrayList<>();
 
-        // выделить в метод(ы) ?
         for (String _l: rawLinks) {
-            // дописываю ссылку, если нужно // (#) !!
-            if (_l.startsWith("#")) {
+            if (wrongStartOfRawLink(_l)) {
                 continue;
             }
-            if (!_l.startsWith("http")) {
-                _l = completeLink(_l);
-            }
 
+            String itMustBeCorrectLink = completeLink(_l);
 
             int responseCode;
 
             try {
-                if (respondedLinks.contains(_l)) {
-                    // Уже проходил ответ по этой ссылке
-                    continue;
+                if (respondedLinks.contains(itMustBeCorrectLink)) {
+                    continue; // Уже проходил ответ по этой ссылке
                 } else {
-                    // делаю запрос с cookies или без них
-                    if (cookieSet != null) {
-                        responseCode = HttpResponse.codeViaGet(_l, cookieSet);
-                    } else {
-                        responseCode = HttpResponse.codeViaGet(_l);
-                    }
-                    // Здесь просто декорированный вывод в консоль, можно исключить
-                    if (_l.contains(baseLink)) {
-                        System.out.println(responseCode + "-^._.^- " + _l);
-                    } else {
-                        System.out.println(responseCode + "-<...>-" + _l);
-                    }
+                     responseCode = getResponseCodeFromLink(itMustBeCorrectLink);
                 }
             } catch (Exception e) {
-                // What: Можно не пробрасывать ошибку здесь, а просто вызывать continue; ?
-                //  Скорее всего, так оно вернее будет
-                throw new Exception(e.getMessage()
-                        + "\n"
-                        + "был запрос по: " + _l);
+                logger.error("[RA] Произошел прикол.");
+                logger.error(e.getCause() + " <<==>> " + e.getMessage() + "\n"
+                        + "был запрос по: " + itMustBeCorrectLink);
+                continue;  // Переходим к следующей "raw" ссылке
             }
 
-            respondedLinks.add(_l);
+            respondedLinks.add(itMustBeCorrectLink);
 
-            // checkResponseCodes()
             if (responseCode != 200) {
-                logger.warn(_l);
+                logger.warn(itMustBeCorrectLink);
                 logger.warn("response code: " + responseCode);
             } else {
-                // addNewLink()
-                if (    _l.contains(baseLink) &&
-                        !endsWithJsIcoEtc(_l) &&
-                        !allLinks.contains(_l)) {
-                    allLinks.add(_l);
-                    System.out.println(" ++ + " + _l);
-                }
+                checkAndAddNewLink(itMustBeCorrectLink, addedInAllLinks);
             }
         }
 
+        cycleEndsAnnouncement(addedInAllLinks, false);
+
         // возвращает false, когда прочекается последняя доступная ссылка из "allLinks"
+        // WHAT: вынести проверку списка наружу
+        //  поменять интерфейс метода на void
         return allLinks.size() > linkNumber + 1;
     }
+
 
     private boolean endsWithJsIcoEtc (String itMayBeLink) {
         // /favicon.ico -- /7ae926c.js -- ненужные окончания
         return itMayBeLink.endsWith(".js")
                 || itMayBeLink.endsWith(".pdf")
                 || itMayBeLink.endsWith(".ico")
-                || itMayBeLink.endsWith(".rss");
+                || itMayBeLink.endsWith(".rss")
+                || itMayBeLink.endsWith(".xml");
     }
-
+    /** Другие протоколы, заглушка*/
+    private boolean wrongStartOfRawLink (String rawLink) {
+        for (String oneOfEx: linkStartingFilter) {
+            if (rawLink.startsWith(oneOfEx)) {
+                return true;
+            }
+        }
+        return false;
+    }
     private String completeLink (String shortLink) {
-        // (//smt.th)
-        // (/smt.th)
+        // (//smt.th) (/smt.th)
         // Важный момент!! Чтобы не дублировалось '//' при конкатенации
+        if (shortLink.startsWith("http")) {
+            return shortLink;
+        }
         if (shortLink.startsWith("//") || !shortLink.startsWith("/")) {
              return shortLink.replace("//", "https://");
 //            return shortLink;
         } else {
             // возможно // return driver.getCurrentUrl() + shortLink;
             return baseLink + shortLink;
+        }
+    }
+
+    private int getResponseCodeFromLink(String link) {
+        int code;
+        // делаю запрос с cookies или без них
+        if (cookieSet != null) {
+            code = HttpResponse.codeViaGet(link, cookieSet);
+        } else {
+            code = HttpResponse.codeViaGet(link);
+        }
+        // Здесь просто декорированный вывод в консоль, можно исключить
+        if (link.contains(baseLink)) {
+            System.out.println(code + "-^._.^- " + link);
+        } else {
+            System.out.println(code + "-<...>-" + link);
+        }
+        return code;
+    }
+
+    private void checkAndAddNewLink(String checkThat, ArrayList<String> arrayList) {
+        // FIXME: здесь нужно убирать глобальную зависимость
+        if (    checkThat.startsWith(baseLink) &&
+                !endsWithJsIcoEtc(checkThat) &&
+                !allLinks.contains(checkThat)) {
+            allLinks.add(checkThat);
+            arrayList.add(checkThat);
+        }
+    }
+    private void cycleEndsAnnouncement (ArrayList<String> arrayList) {
+        cycleEndsAnnouncement(arrayList, false);
+    }
+    private void cycleEndsAnnouncement (ArrayList<String> arrayList, boolean describeEach) {
+        if (arrayList.size() > 0) {
+            logger.info("(" + arrayList.size() + ") ссылок было добавлено");
+            if (describeEach) {
+                for (String link:arrayList) {
+                    logger.info(link);
+                }
+            }
         }
     }
 }
