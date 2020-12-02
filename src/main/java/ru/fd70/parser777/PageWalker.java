@@ -10,12 +10,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Set;
 
-
+/**
+ *      Парсит ссылки, проверяет код ответа, делает все сама
+ *      Делает все это на базе Selenium (chromeDriver)
+ *
+ *      -- чтоза Добавить возможность параллельно запускать несколько "CDriver"
+ *      -- Возможность настройки: проверять ссылки с других url, или нет
+ * */
 public class PageWalker {
 
     ChromeDriver driver;
     Logger logger;
-
     String baseLink;
 
     private static Set<Cookie> cookieSet = null;
@@ -23,8 +28,37 @@ public class PageWalker {
         cookieSet = _cs;
     }
 
-    private final ArrayList<String> allLinks = new ArrayList<>();
-    private final ArrayList<String> responsedLinks = new ArrayList<>();
+
+
+    private static final ArrayList<String> allLinks = new ArrayList<>();
+    private static final ArrayList<String> respondedLinks = new ArrayList<>();
+
+    // чтоза также добавить методы для вызова новых экземпляров CD,
+    //  Нужно придумать еще, при каких условиях запускать остальные экземпляры CD
+    //  Без запуска нескольких экземпляров, synchronized часть кода не будет иметь смысла
+
+    private static synchronized void addInAllLinks (String link) {
+        allLinks.add(link);
+    }
+    private static synchronized String getFromAllLinks (int linkNumber) {
+        return allLinks.get(linkNumber);
+        // ЧТОЗА здесь нужно увеличивать значение счетчика COUNTER;
+    }
+
+    private static synchronized boolean containsInAllLinks (String link) {
+        // чтоза пустота
+        return false;
+    }
+    private static synchronized void addInRespondedLinks (String link) {
+        respondedLinks.add(link);
+    }
+    private static synchronized boolean containsInRespondedLinks (String link) {
+        // чтоза пустота
+        return false;
+    }
+
+
+
 
     public PageWalker (ChromeDriver driver, Logger logger, String baseUrl) {
         this.driver = driver;
@@ -37,7 +71,9 @@ public class PageWalker {
 
     private int COUNTER = 0;
     private void mainloop () {
-        // FIXME: Убрать "рекурсивную" зависимость метода
+        // WHAT the: тут нужно либо вызывать метод с параметром, либо одно из двух;
+        //  Хотя, как ты организуешь обход всех ссылок, не используя цикла.
+        //  Значит нужно перехватывать Исключения на более низком уровне, чем здесь
         try {
             while (pageWalker(COUNTER++));
         } catch (IndexOutOfBoundsException i008e) {
@@ -57,6 +93,7 @@ public class PageWalker {
         }
     }
 
+    // WHAT: поменять название метода, на linkCrawler или что-то более говорящее и относящееся к сущности
     private boolean pageWalker (int linkNumber) throws Exception {
 
         String nextUrl = allLinks.get(linkNumber);
@@ -86,7 +123,7 @@ public class PageWalker {
             int responseCode;
 
             try {
-                if (responsedLinks.contains(_l)) {
+                if (respondedLinks.contains(_l)) {
                     // Уже проходил ответ по этой ссылке
                     continue;
                 } else {
@@ -104,13 +141,14 @@ public class PageWalker {
                     }
                 }
             } catch (Exception e) {
+                // What: Можно не пробрасывать ошибку здесь, а просто вызывать continue; ?
+                //  Скорее всего, так оно вернее будет
                 throw new Exception(e.getMessage()
                         + "\n"
                         + "был запрос по: " + _l);
             }
 
-
-            responsedLinks.add(_l);
+            respondedLinks.add(_l);
 
             // checkResponseCodes()
             if (responseCode != 200) {
