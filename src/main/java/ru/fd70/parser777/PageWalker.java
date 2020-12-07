@@ -2,6 +2,8 @@ package parser777;
 
 import initial.AFuncs;
 
+import initial.CDF;
+import org.apache.commons.lang3.tuple.Pair;
 import org.openqa.selenium.Cookie;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.slf4j.Logger;
@@ -19,16 +21,21 @@ import java.util.Set;
  * */
 public class PageWalker {
 
-    // чтоза: очевидно, что переменная нужна для одновременного запуска неск. CD
-    int COUNT_OF_THREADS = 1;
+//    static ArrayList<PageWalker>
 
-    ChromeDriver driver;
-    Logger logger;
-    String baseLink;
+    static int COUNT_OF_THREADS = 1;
+    static boolean RUNNING = true;
+
+    final ChromeDriver driver;
+    final Logger logger;
+    final String baseLink;
 
     private static Set<Cookie> cookieSet = null;
     public static void setCookies (Set<Cookie> _cs) {
         cookieSet = _cs;
+    }
+    public static void setCountOfThreads(int count) {
+        COUNT_OF_THREADS = count;
     }
 
     // that is for: private boolean wrongStartOfRawLink (String rawLink)
@@ -44,25 +51,45 @@ public class PageWalker {
     //  Нужно придумать еще, при каких условиях запускать остальные экземпляры CD
     //  Без запуска нескольких экземпляров, synchronized часть кода не будет иметь смысла
 
+    // ссыром: нужно делать коллекцию экземпляров *ЭТОГО* класса, а не CD
+    //  конкретно запуска цикла mainloop()
+
     private static synchronized void addInAllLinks (String link) {
         allLinks.add(link);
     }
-    private static synchronized String getFromAllLinks (int linkNumber) {
-        return allLinks.get(linkNumber);
-        // ЧТОЗА здесь нужно увеличивать значение счетчика COUNTER;
+    private static synchronized boolean allLinksHaveAnotherOne (int counterValue) {
+        // WHAT A FAK тут проблемка может случиться, и тогда > counterValue + 1;
+        return allLinks.size() > counterValue;
+    }
+    private static synchronized Pair<Integer, String> getFromAllLinks (int linkNumber) throws Exception {
+        if (allLinksHaveAnotherOne(linkNumber)) {
+            COUNTER++;
+            return Pair.of(linkNumber, allLinks.get(linkNumber));
+        } else {
+            throw new Exception("NPE in getFromAllLinks!");
+        }
     }
     private static synchronized boolean containsInAllLinks (String link) {
-        // чтоза пустота
-        return false;
+        return allLinks.contains(link);
     }
     private static synchronized void addInRespondedLinks (String link) {
         respondedLinks.add(link);
     }
     private static synchronized boolean containsInRespondedLinks (String link) {
-        // чтоза пустота
-        return false;
+        return respondedLinks.contains(link);
     }
 
+    private static synchronized void checkAndAddNewLink(String checkThat, ArrayList<String> arrayList) {
+        if (    checkThat.startsWith(allLinks.get(0)) &&
+                !endsWithJsIcoEtc(checkThat) &&
+                !allLinks.contains(checkThat)) {
+            //addInAllLinks(checkThat);
+            allLinks.add(checkThat);
+            arrayList.add(checkThat);
+        }
+    }
+
+    // чтоза: можно добавить приватный конструктор, который будет инициализировать CD изнутри и только
     public PageWalker (ChromeDriver driver, Logger logger, String baseUrl) {
         this.driver = driver;
         this.logger = logger;
@@ -72,17 +99,21 @@ public class PageWalker {
         mainloop();
     }
 
-    private int COUNTER = 0;
+    // чтоза: добавил волатайл, надеюсь, отдельные методы не придется прописывать для инта
+    private static volatile int COUNTER = 0;
     private void mainloop () {
         try {
-            // чтоза прикол, тогда надо будет делать условие для этого интерфейса
-            //  ведь каждый из f. потоков может найти новые ссылки после того,
-            //  как выйдут остальные экземпляры CD
             // чтоза GATE = true; GATE = false;
-            while (parseLinksWhileTheyAre(COUNTER++)) {
-                // allLinks.
+            //  while (GATE) { ...
+            while (RUNNING) {
+                // чтоза: возможно, надо будет добавить статус работы каждока экз, класса PageWalker
                 // What: добавить тело цикла, внутри:
                 //  проверка на количество оставшихся ссылок соответственно
+                while (allLinksHaveAnotherOne(COUNTER)) {
+                    parseRoute(getFromAllLinks(COUNTER));
+                }
+                // чтоза: поток прошел через все доступные ему ссылки
+                //  Здесь нужно регулировать продолжение работы, либо завершение его nahoy
             }
         } catch (IndexOutOfBoundsException i008e) {
             logger.error(i008e.getCause() + i008e.getMessage());
@@ -101,9 +132,14 @@ public class PageWalker {
         }
     }
 
-    private boolean parseLinksWhileTheyAre(int linkNumber) throws Exception {
+    private void parseRoute(Pair<Integer, String> enumeratedLink) {
 
-        String nextUrl = allLinks.get(linkNumber);
+//        String nextUrl = allLinks.get(linkNumber);
+//        logger.info("[" + linkNumber + "] " + nextUrl);
+//        driver.get(nextUrl);
+
+        int linkNumber = enumeratedLink.getLeft();
+        String nextUrl = enumeratedLink.getRight();
         logger.info("[" + linkNumber + "] " + nextUrl);
         driver.get(nextUrl);
 
@@ -123,7 +159,7 @@ public class PageWalker {
             int responseCode;
 
             try {
-                if (respondedLinks.contains(itMustBeCorrectLink)) {
+                if (containsInRespondedLinks(itMustBeCorrectLink)) {
                     continue; // Уже проходил ответ по этой ссылке
                 } else {
                      responseCode = getResponseCodeFromLink(itMustBeCorrectLink);
@@ -135,7 +171,8 @@ public class PageWalker {
                 continue;  // Переходим к следующей "raw" ссылке
             }
 
-            respondedLinks.add(itMustBeCorrectLink);
+            addInRespondedLinks(itMustBeCorrectLink);
+            //respondedLinks.add(itMustBeCorrectLink);
 
             if (responseCode != 200) {
                 logger.warn(itMustBeCorrectLink);
@@ -146,15 +183,10 @@ public class PageWalker {
         }
 
         cycleEndsAnnouncement(addedInAllLinks, false);
-
-        // возвращает false, когда прочекается последняя доступная ссылка из "allLinks"
-        // WHAT: вынести проверку списка наружу
-        //  поменять интерфейс метода на void
-        return allLinks.size() > linkNumber + 1;
+        //return allLinks.size() > linkNumber + 1;
     }
 
-
-    private boolean endsWithJsIcoEtc (String itMayBeLink) {
+    private static boolean endsWithJsIcoEtc (String itMayBeLink) {
         // /favicon.ico -- /7ae926c.js -- ненужные окончания
         return itMayBeLink.endsWith(".js")
                 || itMayBeLink.endsWith(".pdf")
@@ -162,8 +194,8 @@ public class PageWalker {
                 || itMayBeLink.endsWith(".rss")
                 || itMayBeLink.endsWith(".xml");
     }
-    /** Другие протоколы, заглушка*/
     private boolean wrongStartOfRawLink (String rawLink) {
+        // Другие протоколы, заглушка
         for (String oneOfEx: linkStartingFilter) {
             if (rawLink.startsWith(oneOfEx)) {
                 return true;
@@ -185,7 +217,6 @@ public class PageWalker {
             return baseLink + shortLink;
         }
     }
-
     private int getResponseCodeFromLink(String link) {
         int code;
         // делаю запрос с cookies или без них
@@ -203,15 +234,7 @@ public class PageWalker {
         return code;
     }
 
-    private void checkAndAddNewLink(String checkThat, ArrayList<String> arrayList) {
-        // FIXME: здесь нужно убирать глобальную зависимость
-        if (    checkThat.startsWith(baseLink) &&
-                !endsWithJsIcoEtc(checkThat) &&
-                !allLinks.contains(checkThat)) {
-            allLinks.add(checkThat);
-            arrayList.add(checkThat);
-        }
-    }
+
     private void cycleEndsAnnouncement (ArrayList<String> arrayList) {
         cycleEndsAnnouncement(arrayList, false);
     }
@@ -225,4 +248,29 @@ public class PageWalker {
             }
         }
     }
+
+    @Deprecated
+    private void newPWInstance () {
+        // WHAT: Передавать параметры родительского CD в CDF
+        new PageWalker_inner(CDF.initCD(), logger, allLinks.get(1));
+    }
+    @Deprecated
+    private class PageWalker_inner extends PageWalker {
+        public PageWalker_inner(ChromeDriver driver, Logger logger, String baseUrl) {
+            super(driver, logger, baseUrl);
+        }
+    }
 }
+
+// чтоза:
+//  Сделать список всех экземпляров
+//  -- основной + дочерние экземпляры
+//  Чекать в отдельном потоке статус каждого экземпляра
+//  Если кто-то простаивает, и еще есть ссылки, --> иди работай
+//  Если все простаивают и ссылок больше нет --> вырубать все!
+
+// ссыром: сделать статик? класс PageWalker_D(), копирующее поведение родителя
+//  переписать методы для взаимодействия с родительским списком
+//  @Override get/addInAllList
+//  //parseLinksWhenTheyAre --> parseRoute
+//  Возможность редактирования этой *штуки
