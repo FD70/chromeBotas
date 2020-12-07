@@ -1,7 +1,6 @@
 package parser777;
 
 import initial.AFuncs;
-import initial.CDF;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.openqa.selenium.Cookie;
@@ -15,14 +14,11 @@ import java.util.Set;
 /**
  *      Парсит ссылки, проверяет код ответа, делает все сама
  *      Делает все это на базе Selenium (chromeDriver)
+ *      Запросы через RestAssured
  *
- *      -- ЧТОЗА: Пускать в отдельные треды запросы по линкам, занимает много времени
  * */
 public class PageWalker {
 
-//    static ArrayList<PageWalker>
-
-    boolean RUNNING = true;
     public char MARKER = '0';
 
     final ChromeDriver driver;
@@ -39,7 +35,6 @@ public class PageWalker {
     private static Set<String> linkStartingFilter = Set.of(
             "#", "viber:", "blob:", "mailto:");
     public static boolean ENDS_ANNOUNCEMENT_ENABLED = false;
-
 
     private volatile int COUNTER = 0;
     private final ArrayList<String> allLinks = new ArrayList<>();
@@ -85,7 +80,7 @@ public class PageWalker {
         mainloop();
     }
 
-    protected void mainloop() {
+    private void mainloop() {
         try {
             while (getAllLinksList().size() > COUNTER) {
                 parseRoute(getFromAllLinks(COUNTER));
@@ -107,6 +102,7 @@ public class PageWalker {
         }
     }
 
+    // what: rename that
     private void parseRoute(Pair<Integer, String> enumeratedLink) {
 
         int linkNumber = enumeratedLink.getLeft();
@@ -118,47 +114,57 @@ public class PageWalker {
         AFuncs.sleep(4000);
 
         ArrayList<String> rawLinks = Parser777.returnLinksFromHTML(driver.getPageSource());
-        // список, который нужен для вывода всех добавленных с *метода ссылок
-        // cycleEndsAnnouncement(..)
+        // список, который нужен для вывода всех добавленных с *метода ссылок // cycleEndsAnnouncement(..)
         ArrayList<String> addedInAllLinks = new ArrayList<>();
+        ArrayList<Thread> pageEachLinkThread = new ArrayList<>();
 
         for (String _l : rawLinks) {
-            if (wrongStartOfRawLink(_l)) {
-                continue;
-            }
-            String itMustBeCorrectLink = completeLink(_l);
-
-            // чтоза: здесь делать ответвление в отдельный поток, для получения кодов ответа по ссылкам
-            //  Если не разделю на сущности, придется весь цикл создавать новые треды, а таких может быть очень *много*
-            int responseCode;
-
-            try {
-                if (getRespondedLinksList().contains(itMustBeCorrectLink)) {
-                    continue; // Уже проходил ответ по этой ссылке
-                } else {
-
-                    responseCode = getResponseCodeFromLink(itMustBeCorrectLink);
-                }
-            } catch (Exception e) {
-                logger.error(this.MARKER + "_[RA] Произошел прикол.");
-                logger.error(e.getCause() + " <<==>> " + e.getMessage() + "\n"
-                        + "был запрос по: " + itMustBeCorrectLink);
-                continue;  // Переходим к следующей "raw" ссылке
-            }
-
-            getRespondedLinksList().add(itMustBeCorrectLink);
-
-            if (responseCode != 200) {
-                logger.warn(itMustBeCorrectLink);
-                logger.warn("response code: " + responseCode);
-            } else {
-                if (checkAndAddNewLink(itMustBeCorrectLink)) {
-                    addedInAllLinks.add(itMustBeCorrectLink);
-                }
-            }
+            // чтоза: ждать отработки всех потоков, затем выпускать из метода!
+            Thread thread = new Thread(() -> completeRawAndResponse(_l, addedInAllLinks));
+            pageEachLinkThread.add(thread);
+            thread.start();
         }
 
+        while (pageEachLinkThread.size() > 0) {
+            pageEachLinkThread.removeIf(thread -> !thread.isAlive());
+        }
+        // объявления количества новых ссылок, (перечисление каждой из них)
         cycleEndsAnnouncement(addedInAllLinks, ENDS_ANNOUNCEMENT_ENABLED);
+    }
+
+    private void completeRawAndResponse (String rawLink, ArrayList<String> addedinalllinks) {
+        // FIXME: Разделить метод
+        if (wrongStartOfRawLink(rawLink)) {
+            return;
+        }
+        String itMustBeCorrectLink = completeLink(rawLink);
+
+        int responseCode;
+
+        try {
+            if (getRespondedLinksList().contains(itMustBeCorrectLink)) {
+                return; // Уже проходил ответ по этой ссылке
+            } else {
+
+                responseCode = getResponseCodeFromLink(itMustBeCorrectLink);
+            }
+        } catch (Exception e) {
+            logger.error(this.MARKER + "_[RA] Произошел прикол.");
+            logger.error(e.getCause() + " <<==>> " + e.getMessage() + "\n"
+                    + "был запрос по: " + itMustBeCorrectLink);
+            return;  // Переходим к следующей "raw" ссылке
+        }
+
+        getRespondedLinksList().add(itMustBeCorrectLink);
+
+        if (responseCode != 200) {
+            logger.warn(itMustBeCorrectLink);
+            logger.warn("response code: " + responseCode);
+        } else {
+            if (checkAndAddNewLink(itMustBeCorrectLink)) {
+                addedinalllinks.add(itMustBeCorrectLink);
+            }
+        }
     }
 
     private boolean endsWithJsIcoEtc(String itMayBeLink) {
@@ -223,34 +229,3 @@ public class PageWalker {
         }
     }
 }
-
-//    @Deprecated
-//    private void newPWInstance () {
-//        new PageWalker_inner(CDF.initCD(), logger, allLinks.get(0)).run();
-//    }
-//    @Deprecated
-//    private static class PageWalker_inner extends PageWalker {
-//        public PageWalker_inner(ChromeDriver driver, Logger logger, String baseUrl) {
-//            super(driver, logger, baseUrl);
-//        }
-//        @Override
-//        public void run() {
-//            mainloop();
-//        }
-//        @Override
-//        protected synchronized ArrayList<String> getAllLinksList() {
-//            return super.getAllLinksList();
-//        }
-//        @Override
-//        protected synchronized ArrayList<String> getRespondedLinksList () {
-//            return super.getRespondedLinksList();
-//        }
-//        @Override
-//        protected synchronized Pair<Integer, String> getFromAllLinks(int linkNumber) throws Exception {
-//            return super.getFromAllLinks(linkNumber);
-//        }
-//        @Override
-//        protected synchronized void checkAndAddNewLink(String checkThat) {
-//            super.checkAndAddNewLink(checkThat);
-//        }
-//}
